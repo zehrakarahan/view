@@ -1,0 +1,105 @@
+Kbn 95 yn v/max 95=>1 =>benzin
+Mot v/max e-dzl 10=>4=>euro diesel=>motorin
+mot YPRDZLEDZl 10 =>6=>yeni pro diesel
+PO/gaz Otogaz=>5=>Lpg
+
+//////////////////////////////////////////////////////
+Create Procedure DetayliSatis
+as
+begin
+select c.Tarih,c.Saat,c.FuelType_Name,b.Plate,b.FleetName,b.FleetCode,c.ECRPlate,c.ECRReceiptNr,c.ReceiptNr,c.PumpNr,c.NozzleNr,c.Amount,c.UnitPrice,
+c.UnitPrice
+from Txn a join TagDetails b 
+on a.TagDetailsNo=b.Id join SaleDetails c on a.SaleDetailsNo=c.Id  
+
+end
+
+exec DetayliSatis
+
+/////////////////////////////////////////////////////////
+
+Create Procedure OzetSatisTab1
+as
+begin
+SELECT a.Txn_Name,COUNT(*),SUM(a.Amount),SUM(a.Total)
+FROM SaleDetails a
+GROUP BY a.Txn_Name;
+end
+
+exec OzetSatisTab1
+
+/////////////////////////////////////////////////////////
+Create Procedure OzetSatisTab2
+as
+begin
+SELECT b.Plate,SUM(a.Amount),COUNT(*),SUM(a.Total)
+FROM SaleDetails a,TagDetails b
+GROUP BY b.Plate;
+
+end
+
+exec OzetSatisTab2
+/////////////////////////////////////////////////////////////
+Create Procedure OzetSatisTab3
+as
+begin
+SELECT a.FuelType_Name,a.UnitPrice,SUM(a.Amount),SUM(a.Total),COUNT(*),Avg(a.Total)
+FROM SaleDetails a
+GROUP BY a.FuelType_Name
+end
+
+exec OzetSatisTab3
+
+//////////////////////////////////////////////////////////////////////////////////
+Create Procedure IstasyonVardiyaRaporu
+as 
+begin
+select a.Date_Of_Entry,a.BaslamaSaati,a.Date_Of_Exit,a.BitisSaati,c.PaymentType,COUNT(*),SUM(c.Amount),SUM(c.Total) from Shift a join Txn b on a.Id=b.Shift_No join SaleDetails c on c.Id=b.SaleDetailsNo
+GROUP BY c.PaymentType
+end
+
+exec IstasyonVardiyaRaporu
+//////////////////////////////////////////////////////////////////////////////////
+
+
+Create Procedure IstasyonVardiyaRaporu
+as 
+begin
+select a.Date_Of_Entry,a.BaslamaSaati,a.Date_Of_Exit,a.BitisSaati,c.PaymentType,COUNT(*),SUM(c.Amount),SUM(c.Total) from Shift a join Txn b on a.Id=b.Shift_No join SaleDetails c on c.Id=b.SaleDetailsNo
+GROUP BY c.PaymentType
+end
+
+exec IstasyonVardiyaRaporu
+//////////////////////////////////////////////////////////////////////////////////
+Create Procedure DetayliSatis
+as
+begin
+select c.Tarih,c.Saat,c.Txn_Name,c.FuelType_Name,b.Plate,b.FleetName,b.FleetCode,c.ECRPlate,c.ECRReceiptNr,c.ReceiptNr,c.PumpNr,c.NozzleNr,c.Amount,c.UnitPrice,
+c.UnitPrice
+from Txn a join TagDetails b 
+on a.TagDetailsNo=b.Id join SaleDetails c on a.SaleDetailsNo=c.Id  
+
+end
+
+exec DetayliSatis
+///////////////////////////////////////////////////////////////////////////////
+
+select DateTime from SaleDetails
+select GETDATE()
+create Procedure VardiyaHesap
+as
+begin
+select a.Shift_No,c.DateTime,b.Plate,SUM(c.Total) from Txn a INNER JOIN TagDetails b on a.TagDetailsNo=b.Id INNER JOIN  SaleDetails c
+on c.Id=a.SaleDetailsNo where c.TxnType!=3 and c.TxnType!=4 and c.DateTime>=GETDATE()
+GROUP BY a.Shift_No,c.DateTime,b.Plate
+end
+
+exec VardiyaHesap
+
+
+
+
+
+
+
+

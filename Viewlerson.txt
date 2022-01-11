@@ -1,0 +1,739 @@
+Create VIEW DetayliSatisRaporu
+AS
+SELECT SD.Id,SD.Tarih,SD.Saat,SD.Txn_Name,SD.FuelType_Name,TD.Plate,TD.FleetName,
+TD.FleetCode,SD.ECRPlate,SD.ECRReceiptNr,SD.ReceiptNr,SD.PumpNr,SD.NozzleNr,SD.Amount,SD.UnitPrice,SD.Total,
+CAST(ROW_NUMBER() OVER(Order by Tarih) as INT) Adet
+FROM Txn T
+INNER JOIN TagDetails TD ON T.TagDetailsNo=TD.Id
+INNER JOIN SaleDetails SD ON T.SaleDetailsNo=SD.Id
+Group By SD.Id,SD.Tarih,SD.Saat,SD.Txn_Name,SD.FuelType_Name,TD.Plate,TD.FleetName,
+TD.FleetCode,SD.ECRPlate,SD.ECRReceiptNr,SD.ReceiptNr,SD.PumpNr,SD.NozzleNr,SD.Amount,SD.UnitPrice,SD.Total
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+CREATE VIEW VardiyaFisi
+as
+SELECT SD.FuelType,SD.FuelType_Name,S.VardiyaIsmi,S.Description,
+S.Vardiya_Baslangic_Tarihi,S.Vardiya_Bitis_Tarihi,
+S.Baslangic_Saati,S.Bitis_Saati,
+SUM(SD.Amount) AS ToplamLitre,SUM(SD.Total) As ToplamTutar
+FROM Txn T
+INNER JOIN SaleDetails SD ON T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S ON T.Shift_No=S.Id
+WHERE YEAR(SD.CreateDate)=YEAR(GETDATE()) AND MONTH(SD.CreateDate)=MONTH(GETDATE()) and DAY(GETDATE())=DAY(SD.CreateDate)
+and S.Id=(SELECT MAX(M.Id) FROM Shift M)
+GROUP BY SD.FuelType,SD.FuelType_Name,S.VardiyaIsmi,S.Description,S.Vardiya_Baslangic_Tarihi,S.Vardiya_Bitis_Tarihi,
+S.Baslangic_Saati,S.Bitis_Saati
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+CREATE View Vardiya_SatisTuruRaporu
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by TxnType) as INT) Id,SD.TxnType,SD.Txn_Name,Count(*) AS SatisAdedi,
+SUM(SD.Amount) AS SatilanLitre, SUM(SD.Total) As SatilanTutar
+FROM SaleDetails SD 
+WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) AND Sd.FuelType IS NOT NULL
+GROUP BY SD.TxnType,SD.Txn_Name
+
+SELECT * FROM Vardiya_SatisTuruRaporu
+
+
+
+CREATE VIEW Vardiya_PompaciSatis
+AS
+SELECT 
+    CAST(ROW_NUMBER() OVER(Order by Plate) as INT) Id,TD.Plate,COUNT(SD.Total) AS SatisAdedi,SUM(SD.Total) AS SatisTutari
+ FROM Txn T 
+ INNER JOIN SaleDetails SD ON SD.Id=T.SaleDetailsNo
+ INNER JOIN TagDetails TD ON TD.Id=T.TagDetailsNo
+ WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) And SD.TxnType<>4  AND SD.TxnType<>3 And SD.FuelType IS NOT NULL
+ GROUP BY TD.Plate
+
+ SELECT * FROM Vardiya_PompaciSatis
+
+
+ CREATE View Vardiya_YakitTipiSatis
+ AS
+ SELECT 
+    CAST(ROW_NUMBER() OVER(Order by FuelType) as INT) Id,SD.FuelType,SD.FuelType_Name,
+	SD.UnitPrice,SUM(SD.Amount) AS SatilanLitre,SUM(SD.Total) As SatisTutari, SUM(SD.Total) AS ToplamLitre
+ FROM SaleDetails SD
+ WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) AND SD.FuelType IS NOT NULL
+ GROUP BY SD.FuelType,SD.FuelType_Name,SD.UnitPrice
+
+ SELECT * FROM Vardiya_YakitTipiSatis
+
+ CREATE VIEW Vardiya_TankCikisi
+ AS
+ SELECT 
+ TankD.TankNo,TankD.Tankname,TankD.FuelType,
+ TankD.CurrentVolume,TankD.PreviousVolume,TankD.Delta,SUM(TankD.CurrentVolume-TankD.PreviousVolume+Delta) AS NetTankCikisi
+ FROM Txn T
+ INNER JOIN SaleDetails SD on T.SaleDetailsNo=SD.Id
+ INNER JOIN TagDetails TD on T.SaleDetailsNo=SD.Id,TankDetails TankD 
+ WHERE YEAR(TankD.CreateDate)=YEAR(GETDATE()) AND MONTH(TankD.CreateDate)=MONTH(GETDATE()) and DAY(GETDATE())=DAY(TankD.CreateDate)
+ GROUP BY TankD.TankNo,TankD.Tankname,TankD.FuelType,
+ TankD.CurrentVolume,TankD.PreviousVolume,TankD.Delta
+
+SELECT * FROM Vardiya_TankCikisi
+
+CREATE View Vardiya_SatisTank_Mutabakati
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by TankD.FuelType) as INT) Id,TankD.FuelType,SUM(SD.Total) AS Pompasatislari,
+TankD.DeliveryVolume AS TankCikisi,
+SUM(SD.Total)-SUM(TankD.DeliveryVolume) As Fark
+FROM Txn T
+INNER JOIN SaleDetails SD ON T.SaleDetailsNo=SD.Id
+INNER JOIN TagDetails TD ON T.TagDetailsNo=SD.Id,
+TankDetails TankD
+WHERE CONVERT(DATE,TankD.CreateDate,104)=CONVERT(DATE,GETDATE(),104) And SD.TxnType<>4  AND SD.TxnType<>3 And SD.FuelType IS NOT NULL
+GROUP BY TankD.FuelType,TankD.DeliveryVolume
+
+select * from Vardiya_SatisTank_Mutabakati
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+CREATE VIEW VardiyaHesapAlma_AsgBilgi
+AS
+SELECT 	CAST(ROW_NUMBER() OVER(Order by SD.Tarih) as INT) Id,CONVERT(DATE,SD.Tarih,104) As Tarih,
+    TD.Plate,
+    ISNULL(SUM(CASE
+		WHEN SD.TxnType= 1  THEN SD.Total		
+	END),0) 'AsgSatislari',S.Vardiya_No,S.Id As VardiyaId
+	FROM SaleDetails SD
+	INNER JOIN Txn T ON T.SaleDetailsNo=SD.Id
+	INNER JOIN TagDetails TD ON T.TagDetailsNo=TD.Id
+	INNER JOIN Shift S ON T.Shift_No=S.Id
+	WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) AND SD.TxnType=1 AND S.Id=(SELECT MAX(M.Id) FROM Shift M) 
+	GROUP BY SD.Tarih,TD.Plate,S.Vardiya_No,S.Id 
+
+CREATE VIEW VardiyaHesapAlma_TtcVeOdegec
+As
+SELECT
+	CAST(ROW_NUMBER() OVER(Order by SD.Tarih) as INT) Id,CONVERT(DATE,SD.Tarih,104) As Tarih,
+    ISNULL(SUM(CASE
+		WHEN SD.TxnType= 3  THEN SD.Total		
+	END),0) 'OdegecSatislari', 
+	 ISNULL(SUM(CASE
+		WHEN SD.TxnType= 4  THEN SD.Total		
+	END),0) 'OtomatikSatislari',S.Vardiya_No,S.Id As VardiyaId
+		FROM SaleDetails SD
+	INNER JOIN Txn T ON T.SaleDetailsNo=SD.Id
+	INNER JOIN TagDetails TD ON T.TagDetailsNo=TD.Id
+	INNER JOIN Shift S ON T.Shift_No=S.Id
+	WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) And S.Id=(SELECT MAX(M.Id) FROM Shift M)
+    GROUP BY SD.Tarih,S.Vardiya_No,S.Id
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Create view OzetSatis_SatisTipi
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by TxnType) as INT) Id,SD.TxnType,SD.Txn_Name,SUM(SD.Amount) AS ToplamLitre,SUM(SD.Total) AS ToplamTutar,
+COUNT(*) AS SatisAdedi FROM SaleDetails SD
+WHERE YEAR(SD.Tarih)=YEAR(GETDATE()) AND MONTH(SD.Tarih)=MONTH(GETDATE()) AND  Sd.FuelType IS NOT NULL
+GROUP BY SD.TxnType,SD.Txn_Name
+
+select * from OzetSatis_SatisTipi
+
+
+Create VIEW OzetSatis_UrunTipi
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by FuelType) as INT) Id,SD.FuelType,SD.FuelType_Name,SD.UnitPrice,SUM(SD.Amount) AS ToplamLitre,
+SUM(SD.Total) AS ToplamTutar,count(*) AS SatisAdedi,AVG(SD.Total) OrtSatisTutari FROM SaleDetails SD
+WHERE YEAR(SD.Tarih)=YEAR(GETDATE()) AND MONTH(SD.Tarih)=MONTH(GETDATE()) AND  Sd.FuelType IS NOT NULL
+GROUP BY SD.FuelType,SD.FuelType_Name,SD.UnitPrice
+
+SELECT *from OzetSatis_UrunTipi
+
+
+CREATE VIEW OzetSatis_PompaciTipi
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by Plate) as INT) Id,TD.Plate,SUM(SD.Amount) AS ToplamLitre,Count(*) AS SatisAdedi,
+SUM(SD.Total) AS ToplamTutar,SUM(SD.Total) AS Fark From SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id 
+INNER JOIN TagDetails TD on T.TagDetailsNo=TD.Id
+WHERE YEAR(SD.Tarih)=YEAR(GETDATE()) AND MONTH(SD.Tarih)=MONTH(GETDATE()) and SD.TxnType=1 AND Sd.FuelType IS NOT NULL
+GROUP BY TD.Plate
+
+select *from OzetSatis_PompaciTipi
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Create view KasaveSatisRapor
+AS
+SELECT 
+   CAST(ROW_NUMBER() OVER(Order by Tarih) as INT) Id,
+	SD.Tarih,
+	SD.FuelType,
+	SD.FuelType_Name,
+
+	ISNULL(SUM(CASE
+		WHEN TxnType= 4 THEN Total		
+	END),0) 'OtomatikliSatis',
+	ISNULL(SUM(CASE
+		WHEN TxnType <> 4 THEN Total		
+	END),0) 'OtomatiksizSatis',
+	sum(Total) ToplamSatisTutari,
+	ISNULL(Count(CASE
+		WHEN TxnType = 4 THEN Total		
+	END),0) 'OtomatikliAdet',
+	ISNULL(Count(CASE
+		WHEN TxnType <> 4 THEN Total		
+	END),0) 'OtomatiksizAdet',
+	Count(Total) ToplamAdet,
+	H.AylikHedef,
+	H.GunlukHedef,
+	H.GunlukOrtalamaSapma,
+	H.GercekGunlukOrtalama,
+	H.Gunsayisi,
+	H.YuzdeBeslikHedef,
+	H.YuzdeOnlukHedef
+   FROM 
+	Txn T
+	INNER JOIN SaleDetails SD ON SD.Id  = T.SaleDetailsNo
+	INNER JOIN TagDetails TD ON TD.Id = T.TagDetailsNo,Hedef H
+	WHERE  YEAR(H.CreateDate)=YEAR(GetDate()) and MONTH(H.CreateDate)=MONTH(GETDATE())
+GROUP BY 
+	SD.Tarih,SD.FuelType,SD.FuelType_Name,	H.AylikHedef,H.GunlukHedef,H.GunlukOrtalamaSapma,H.GercekGunlukOrtalama,
+	H.Gunsayisi,H.YuzdeBeslikHedef,H.YuzdeOnlukHedef
+
+
+	select *from KasaveSatisRapor
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Select MaxT.TankNo, MaxT.CurrentVolume, MinT.PreviousVolume
+from 
+(select t11.TankNo, t11.CurrentVolume
+from 
+(SELECT Max(Shift_No) max1, TankNo
+  FROM TankDetails
+  group by TankNo) maxT ,
+   TankDetails  t11
+   where  t11.Shift_No = maxT.max1 and t11.TankNo = maxT.TankNo  )  MaxT,
+   (select t11.TankNo, t11.PreviousVolume from 
+    (SELECT Min(Shift_No) min1, TankNo
+     FROM TankDetails
+     group by TankNo) minT ,
+     TankDetails  t11
+     where  t11.Shift_No = minT.min1 and t11.TankNo = minT.TankNo)  MinT
+     where MaxT.TankNo = MinT.TankNo
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Create view Vmax_95
+as
+select SD.CreateDate,Sum(SD.Amount) as ToplamLitre,Sum(SD.Total) As ToplamTutar,S.Id
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where   CONVERT(DATE, SD.CreateDate, 104) = CONVERT(DATE, GETDATE(), 104) And SD.FuelType IS NOT NULL 
+And SD.TxnType=1
+Group By SD.CreateDate,S.Id
+Having S.Id=(Select MAX(S.Id) from Shift M)
+
+Create view Lpg_Po_Gaz_Otogaz
+as
+select SD.CreateDate,Sum(SD.Amount) as ToplamLitre,Sum(SD.Total) As ToplamTutar,S.Id
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where   CONVERT(DATE, SD.CreateDate, 104) = CONVERT(DATE, GETDATE(), 104) And SD.FuelType IS NOT NULL 
+And SD.TxnType=5
+Group By SD.CreateDate,S.Id
+Having S.Id=(Select MAX(S.Id) from Shift M)
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+Create view Vmax_EuroDizel
+as
+select SD.CreateDate,Sum(SD.Amount) as ToplamLitre,Sum(SD.Total) As ToplamTutar,S.Id
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where   CONVERT(DATE, SD.CreateDate, 104) = CONVERT(DATE, GETDATE(), 104) And SD.FuelType IS NOT NULL 
+And SD.TxnType=4
+Group By SD.CreateDate,S.Id
+Having S.Id=(Select MAX(S.Id) from Shift M)
+
+Create view YeniProDizel_Mot_Yprdzledzl
+as
+select SD.CreateDate,Sum(SD.Amount) as ToplamLitre,Sum(SD.Total) As ToplamTutar,S.Id
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where   CONVERT(DATE, SD.CreateDate, 104) = CONVERT(DATE, GETDATE(), 104) And SD.FuelType IS NOT NULL 
+And SD.TxnType=6
+Group By SD.CreateDate,S.Id
+Having S.Id=(Select MAX(S.Id) from Shift M)
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view Vmax_95_Detayli_Incele
+as
+select CAST(ROW_NUMBER() OVER(Order by SD.CreateDate) as INT) Id,
+SD.CreateDate,Sum(SD.Amount) as ToplamLitre,Sum(SD.Total) As ToplamTutar,S.VardiyaIsmi,S.Vardiya_No
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where   YEAR(SD.CreateDate)=YEAR(GETDATE()) and MONTH(SD.CreateDate)=MONTH(GETDATE())  And SD.FuelType IS NOT NULL 
+And SD.TxnType=1
+Group By SD.CreateDate,S.VardiyaIsmi,S.Vardiya_No
+
+Create view Lpg_Po_Gaz_Otogaz_Detayli_Incele
+as
+select CAST(ROW_NUMBER() OVER(Order by SD.CreateDate) as INT) Id,SD.CreateDate,Sum(SD.Amount) as ToplamLitre,
+Sum(SD.Total) As ToplamTutar,S.VardiyaIsmi,S.Vardiya_No
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where  YEAR(SD.CreateDate)=YEAR(GETDATE()) and MONTH(SD.CreateDate)=MONTH(GETDATE()) And SD.FuelType IS NOT NULL 
+And SD.TxnType=5
+Group By SD.CreateDate,S.VardiyaIsmi,S.Vardiya_No
+
+
+Create view Vmax_EuroDizel_Detayli_Incele
+as
+select CAST(ROW_NUMBER() OVER(Order by SD.CreateDate) as INT) Id,SD.CreateDate,Sum(SD.Amount) as ToplamLitre,Sum(SD.Total) As ToplamTutar,
+S.VardiyaIsmi,S.Vardiya_No
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where  YEAR(SD.CreateDate)=YEAR(GETDATE()) and MONTH(SD.CreateDate)=MONTH(GETDATE()) And SD.FuelType IS NOT NULL 
+And SD.TxnType=4
+Group By SD.CreateDate,S.VardiyaIsmi,S.Vardiya_No
+
+Create view YeniProDizel_Mot_Yprdzledzl_Detayli_Incele
+as
+select CAST(ROW_NUMBER() OVER(Order by SD.CreateDate) as INT) Id,SD.CreateDate,Sum(SD.Amount) as ToplamLitre,Sum(SD.Total) As ToplamTutar,
+S.VardiyaIsmi,S.Vardiya_No
+from SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S on T.Shift_No=S.Id
+Where   YEAR(SD.CreateDate)=YEAR(GETDATE()) and MONTH(SD.CreateDate)=MONTH(GETDATE()) And SD.FuelType IS NOT NULL 
+And SD.TxnType=6
+Group By SD.CreateDate,S.VardiyaIsmi,S.Vardiya_No
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+abinin yaptigi
+
+Select MaxT.TankNo, MaxT.CurrentVolume, MinT.PreviousVolume
+from 
+(select t11.TankNo, t11.CurrentVolume
+from 
+(SELECT Max(Shift_No) max1, TankNo
+  FROM TankDetails
+  group by TankNo) maxT ,
+
+   TankDetails  t11
+
+   where  t11.Shift_No = maxT.max1 and t11.TankNo = maxT.TankNo  )  MaxT,
+   (
+   select t11.TankNo, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, TankNo
+  FROM TankDetails
+  group by TankNo) minT ,
+   TankDetails  t11
+
+   where  t11.Shift_No = minT.min1 and t11.TankNo = minT.TankNo)  MinT
+
+   where MaxT.TankNo = MinT.TankNo
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view Vardiya_SatisTank_Mutabakati
+as
+select CAST(ROW_NUMBER() OVER(Order by Tank11.Tankname) as INT) Id,Tank11.Tankname,Tank11.AsgLitreleri,Tank22.Net_Tank_Cikisi,
+(Tank11.AsgLitreleri-Tank22.Net_Tank_Cikisi) As FarkLitre
+from 
+(select TankD.Tankname  ,SUM(Sd.Amount) As AsgLitreleri from TankDetails TankD
+Inner Join Txn T on T.Shift_No=TankD.Shift_No
+Inner Join SaleDetails SD on SD.Id=T.SaleDetailsNo
+where UPPER(REPLACE(SD.FuelType_Name, ' ', ''))=UPPER(REPLACE(TankD.Tankname, ' ', ''))
+Group By TankD.Tankname)  Tank11,
+
+(Select MaxT.Tankname,MaxT.FuelType,
+MaxT.CurrentVolume, MinT.PreviousVolume,MaxT.Delta,
+((MaxT.Delta)-(MaxT.CurrentVolume-MinT.PreviousVolume)) As Net_Tank_Cikisi
+from 
+(select t11.Tankname,t11.FuelType, t11.CurrentVolume,t11.Delta
+from 
+(SELECT Max(Shift_No) max1, Tankname
+  FROM TankDetails
+  group by Tankname) maxT ,
+
+   TankDetails  t11
+
+   where  t11.Shift_No = maxT.max1 and t11.Tankname = maxT.Tankname )  MaxT,
+   (
+   select t11.Tankname, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, Tankname
+  FROM TankDetails
+  group by Tankname) minT ,
+   TankDetails  t11
+
+   where  t11.Shift_No = minT.min1 and t11.Tankname = minT.Tankname)  MinT
+
+   where MaxT.Tankname = MinT.Tankname) Tank22
+where Tank11.Tankname=Tank22.Tankname
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view Vardiya_SatisTank_Mutabakati
+as
+select CAST(ROW_NUMBER() OVER(Order by Tank22.Tankname) as INT) Id,Tank22.Tankname,Tank11.AsgLitreleri,Tank22.Net_Tank_Cikisi,
+(Tank11.AsgLitreleri-Tank22.Net_Tank_Cikisi) As FarkLitre
+from 
+(select TankD.Tankname  ,SUM(Sd.Amount) As AsgLitreleri from TankDetails TankD
+Inner Join Txn T on T.Shift_No=TankD.Shift_No
+Inner Join SaleDetails SD on SD.Id=T.SaleDetailsNo
+where UPPER(REPLACE(SD.FuelType_Name, ' ', ''))=UPPER(REPLACE(TankD.Tankname, ' ', ''))
+Group By TankD.Tankname)  Tank11,
+
+(Select MaxT.Tankname,MaxT.FuelType,
+MaxT.CurrentVolume, MinT.PreviousVolume,MaxT.Delta,
+((MaxT.Delta)-(MaxT.CurrentVolume-MinT.PreviousVolume)) As Net_Tank_Cikisi
+from 
+(select t11.Tankname,t11.FuelType, t11.CurrentVolume,t11.Delta
+from 
+(SELECT Max(Shift_No) max1, Tankname
+  FROM TankDetails
+  group by Tankname) maxT ,
+
+   TankDetails  t11
+
+   where  t11.Shift_No = maxT.max1 and t11.Tankname = maxT.Tankname )  MaxT,
+   (
+   select t11.Tankname, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, Tankname
+  FROM TankDetails
+  group by Tankname) minT ,
+   TankDetails  t11
+
+   where  t11.Shift_No = minT.min1 and t11.Tankname = minT.Tankname)  MinT
+
+   where MaxT.Tankname = MinT.Tankname) Tank22
+where Tank11.Tankname=Tank22.Tankname
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ALTER View Vardiya_SatisTank_Mutabakati
+as
+select CAST(ROW_NUMBER() OVER(Order by Tank33.FuelType) as INT) Id,Tank33.FuelType,Tank11.AsgLitreleri,Tank33.TankCikisi,
+(Tank11.AsgLitreleri-Tank33.TankCikisi) As Fark
+from
+(select TankD.Tankname  ,SUM(Sd.Amount) As AsgLitreleri from TankDetails TankD
+Inner Join Txn T on T.Shift_No=TankD.Shift_No
+Inner Join SaleDetails SD on SD.Id=T.SaleDetailsNo
+where UPPER(REPLACE(SD.FuelType_Name, ' ', ''))=UPPER(REPLACE(TankD.Tankname, ' ', '')) and Sd.FuelType IS NOT NULL
+Group By TankD.Tankname)  Tank11,
+
+(select Tank22.FuelType, sum(Tank22.Net_Tank_Cikisi) As TankCikisi
+from 
+(Select MaxT.FuelType,
+((MaxT.Delta)-(MaxT.CurrentVolume-MinT.PreviousVolume)) As Net_Tank_Cikisi
+from 
+(select t11.TankNo,t11.Tankname,t11.FuelType, t11.CurrentVolume,t11.Delta
+from 
+(SELECT Max(Shift_No) max1, TankNo,Tankname
+  FROM TankDetails
+  group by TankNo,Tankname) maxT ,
+
+   TankDetails  t11
+   where  t11.Shift_No = maxT.max1 and t11.TankNo = maxT.TankNo and t11.Tankname = maxT.Tankname)  MaxT,
+   (
+   select t11.TankNo,t11.Tankname, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, TankNo,Tankname
+  FROM TankDetails
+  group by TankNo,Tankname) minT ,
+   TankDetails  t11
+   where  t11.Shift_No = minT.min1 and t11.TankNo = minT.TankNo and t11.Tankname = minT.Tankname)  MinT
+   where MaxT.TankNo = MinT.TankNo and MaxT.Tankname = MinT.Tankname)  Tank22
+   group by  Tank22.FuelType) Tank33
+   where Tank11.Tankname=Tank33.FuelType
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view VardiyaFisi
+as
+SELECT SD.FuelType, SD.FuelType_Name, S.VardiyaIsmi, S.Description, S.Vardiya_Baslangic_Tarihi,
+S.Vardiya_Bitis_Tarihi, S.Baslangic_Saati, S.Bitis_Saati, SUM(SD.Amount) AS ToplamLitre, SUM(SD.Total) AS ToplamTutar
+FROM     dbo.Txn AS T INNER JOIN
+                  dbo.SaleDetails AS SD ON T.SaleDetailsNo = SD.Id 
+				  INNER JOIN dbo.Shift AS S ON T.Shift_No = S.Id
+WHERE  (YEAR(SD.CreateDate) = YEAR(GETDATE())) AND (MONTH(SD.CreateDate) = MONTH(GETDATE())) AND (DAY(GETDATE()) = DAY(SD.CreateDate)) 
+AND (S.Id =
+                      (SELECT MAX(Id) AS Expr1
+                       FROM      dbo.Shift AS M))
+GROUP BY SD.FuelType, SD.FuelType_Name, S.VardiyaIsmi, S.Description, S.Vardiya_Baslangic_Tarihi, S.Vardiya_Bitis_Tarihi,
+S.Baslangic_Saati, S.Bitis_Saat
+
+Alter View VardiyaFisiRaporu
+as
+select CAST(ROW_NUMBER() OVER (ORDER BY SD.FuelType) AS INT) Id,SD.FuelType, SD.FuelType_Name,
+S.VardiyaIsmi, S.Description, S.Vardiya_Baslangic_Tarihi,
+S.Vardiya_Bitis_Tarihi, S.Baslangic_Saati, S.Bitis_Saati,
+ SUM(SD.Amount) AS ToplamLitre, SUM(SD.Total) AS ToplamTutar
+from Txn T
+INNER JOIN SaleDetails SD on SD.Id=T.SaleDetailsNo
+INNER JOIN TagDetails TD on TD.Id=T.TagDetailsNo
+INNER JOIN Shift S on T.Shift_No=S.Id
+WHERE  CONVERT(DATE, SD.CreateDate, 104) = CONVERT(DATE, GETDATE(), 104)
+AND (S.Id =(select Max(M.Id) from Shift M))
+GROUP BY SD.FuelType, SD.FuelType_Name, S.VardiyaIsmi, S.Description, S.Vardiya_Baslangic_Tarihi, S.Vardiya_Bitis_Tarihi,
+S.Baslangic_Saati, S.Bitis_Saati
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view Vardiya_TankCikisi
+as
+Select CAST(ROW_NUMBER() OVER(Order by MaxT.TankNo) as INT) Id,MaxT.TankNo,MaxT.Tankname,MaxT.FuelType,
+MaxT.CurrentVolume, MinT.PreviousVolume,MaxT.Delta,
+((MaxT.Delta)-(MaxT.CurrentVolume-MinT.PreviousVolume)) As Net_Tank_Cikisi
+from 
+(select t11.TankNo,t11.Tankname,t11.FuelType, t11.CurrentVolume,t11.Delta
+from 
+(SELECT Max(Shift_No) max1, TankNo
+  FROM TankDetails
+  group by TankNo) maxT ,
+
+   TankDetails  t11
+
+   where  t11.Shift_No = maxT.max1 and t11.TankNo = maxT.TankNo and YEAR(t11.CreateDate)=YEAR(GETDATE()) 
+   and Month(t11.CreateDate)=Month(GETDATE()))  MaxT,
+   (
+   select t11.TankNo, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, TankNo
+  FROM TankDetails
+  group by TankNo) minT ,
+   TankDetails  t11
+
+   where  t11.Shift_No = minT.min1 and t11.TankNo = minT.TankNo and YEAR(t11.CreateDate)=YEAR(GETDATE()) 
+   and Month(t11.CreateDate)=Month(GETDATE()))  MinT
+
+   where MaxT.TankNo = MinT.TankNo
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view Vardiya_SatisTank_Mutabakati
+as
+select CAST(ROW_NUMBER() OVER(Order by Tank11.Tankname) as INT) Id,Tank22.Tankname,Tank11.AsgLitreleri,Tank22.Net_Tank_Cikisi,
+(Tank11.AsgLitreleri-Tank22.Net_Tank_Cikisi) As FarkLitre
+
+from
+
+(select TankD.Tankname  ,SUM(Sd.Amount) As AsgLitreleri from TankDetails TankD
+Inner Join Txn T on T.Shift_No=TankD.Shift_No
+Inner Join SaleDetails SD on SD.Id=T.SaleDetailsNo
+where UPPER(REPLACE(SD.FuelType_Name, ' ', ''))=UPPER(REPLACE(TankD.Tankname, ' ', '')) and Sd.FuelType IS NOT NULL
+Group By TankD.Tankname)  Tank11,
+
+(Select MaxT.Tankname,MaxT.FuelType,
+MaxT.CurrentVolume, MinT.PreviousVolume,MaxT.Delta,
+((MaxT.Delta)-(MaxT.CurrentVolume-MinT.PreviousVolume)) As Net_Tank_Cikisi
+from 
+(select t11.Tankname,t11.FuelType, t11.CurrentVolume,t11.Delta
+from 
+(SELECT Max(Shift_No) max1, Tankname
+  FROM TankDetails
+  group by Tankname) maxT ,
+
+   TankDetails  t11
+   where  t11.Shift_No = maxT.max1 and t11.Tankname = maxT.Tankname )  MaxT,
+   (
+   select t11.Tankname, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, Tankname
+  FROM TankDetails
+  group by Tankname) minT ,
+   TankDetails  t11
+
+   where  t11.Shift_No = minT.min1 and t11.Tankname = minT.Tankname)  MinT
+
+   where MaxT.Tankname = MinT.Tankname) Tank22
+where Tank11.Tankname=Tank22.Tankname
+ /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+(select Tb.FuelType, sum(Tb.Net_Tank_Cikisi)
+from 
+
+(Select MaxT.FuelType,
+((MaxT.Delta)-(MaxT.CurrentVolume-MinT.PreviousVolume)) As Net_Tank_Cikisi
+from 
+(select t11.TankNo,t11.Tankname,t11.FuelType, t11.CurrentVolume,t11.Delta
+from 
+(SELECT Max(Shift_No) max1, TankNo,Tankname
+  FROM TankDetails
+  group by TankNo,Tankname) maxT ,
+
+   TankDetails  t11
+   where  t11.Shift_No = maxT.max1 and t11.TankNo = maxT.TankNo and t11.Tankname = maxT.Tankname)  MaxT,
+   (
+   select t11.TankNo,t11.Tankname, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, TankNo,Tankname
+  FROM TankDetails
+  group by TankNo,Tankname) minT ,
+   TankDetails  t11
+
+   where  t11.Shift_No = minT.min1 and t11.TankNo = minT.TankNo and t11.Tankname = minT.Tankname)  MinT
+
+   where MaxT.TankNo = MinT.TankNo and MaxT.Tankname = MinT.Tankname)  Tb
+
+   group by  Tb.FuelType)
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view TankDurum
+as
+select CAST(ROW_NUMBER() OVER (ORDER BY TankNo) AS INT) Id,TD.TankNo,
+TD.Tankname,(((TD.Delta)/(TD.PreviousVolume))*100) AS TankYuzdesi from TankDetails TD
+Inner Join Shift S on TD.Shift_No=S.Id
+where S.Id=(select MAX(M.Id) from Shift M)
+
+Alter view TankDurum_Detayi
+as
+select CAST(ROW_NUMBER() OVER (ORDER BY TankNo) AS INT) Id,TD.TankNo,TD.CreateDate,
+TD.Tankname,(((TD.Delta)/(TD.PreviousVolume))*100) AS TankYuzdesi from TankDetails TD
+Inner Join Shift S on TD.Shift_No=S.Id
+where YEAR(TD.CreateDate)=YEAR(GETDATE()) and MONTH(TD.CreateDate)=MONTH(GETDATE())
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Alter view AsgEkGelirDurum
+as
+select CAST(ROW_NUMBER() OVER (ORDER BY DH.EkGelirAdi) AS INT) Id,DH.EkGelirAdi,
+SUM(AH.SatilanAdet) As SatilanAdet,SUM(AH.SatisTutari) AS SatisTutari from AsgEkGelirHareket AH
+Inner Join DigerEkGelir DH on AH.DigerEkGelir_No=DH.Id
+Inner Join Shift S on CONVERT(DATE, S.CreateDate, 104) = CONVERT(DATE, DH.CreateDate, 104)
+where S.Id=(select MAX(M.Id) from Shift M)
+Group by DH.EkGelirAdi
+
+Alter view AsgEkgelirDetayliDurum
+as
+select CAST(ROW_NUMBER() OVER (ORDER BY DH.EkGelirAdi) AS INT) Id,DH.EkGelirAdi,AH.CreateDate,
+SUM(AH.SatilanAdet) As SatilanAdet,SUM(AH.SatisTutari) AS SatisTutari from AsgEkGelirHareket AH
+Inner Join DigerEkGelir DH on AH.DigerEkGelir_No=DH.Id
+where Year(AH.CreateDate)=YEAR(GETDATE())
+Group by DH.EkGelirAdi,AH.CreateDate
+
+
+Alter View DigerEkgelirDurum
+as
+select CAST(ROW_NUMBER() OVER (ORDER BY DE.EkGelirAdi) AS INT) Id,DE.EkGelirAdi,
+SUM(DEH.Miktar) AS SatısMiktari,Sum(DEH.SatisTutari) As SatisTutari from DigerEkgelir_Hareket DEH
+Inner Join DigerEkGelir DE on DEH.DigerEkGelir_No=DE.Id
+Inner Join Shift S on DEH.Shift_No=S.Id
+where S.Id=(select MAX(M.Id) from Shift M)
+Group by DE.EkGelirAdi
+
+Alter View DigerEkgelirDurumDetay
+as
+select CAST(ROW_NUMBER() OVER (ORDER BY DE.EkGelirAdi) AS INT) Id,DE.EkGelirAdi,DEH.CreateDate,
+SUM(DEH.Miktar) AS SatısMiktari,Sum(DEH.SatisTutari) As SatisTutari from DigerEkgelir_Hareket DEH
+Inner Join DigerEkGelir DE on DEH.DigerEkGelir_No=DE.Id
+where Year(DEH.CreateDate)=YEAR(GETDATE())
+Group by DE.EkGelirAdi,DEH.CreateDate
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+select GETDATE()
+Create FUNCTION VardiyaHesabiAl
+(
+    @baslangictarihi Datetime,
+	@VardiyaIsmi INT
+)
+RETURNS TABLE
+AS
+RETURN
+(
+   
+    select SD.CreateDate,TD.Plate,Sum(SD.Total) AS VardiyaTutari from SaleDetails SD
+	INNER JOIN Txn T on SD.Id=T.SaleDetailsNo 
+	INNER JOIN TagDetails TD on TD.Id=T.TagDetailsNo
+	where Convert(Date,SD.CreateDate)=CONVERT(DATE,@baslangictarihi) and SD.VardiyaIsmi=@VardiyaIsmi and 
+	SD.TxnType=1
+    Group By SD.CreateDate,TD.Plate
+);
+
+Alter PROCEDURE VardiyaHesabiAlimi  @VardiyaIsmi nchar(30),@Vardiya_No nchar(30)
+AS
+   select CAST(ROW_NUMBER() OVER (ORDER BY TD.Plate) AS INT) Id,TD.Plate,Sum(SD.Total) AS VardiyaTutari from SaleDetails SD
+	INNER JOIN Txn T on SD.Id=T.SaleDetailsNo 
+	INNER JOIN TagDetails TD on TD.Id=T.TagDetailsNo
+	where SD.VardiyaIsmi=@VardiyaIsmi and 
+	SD.TxnType=1 and SD.Vardiya_No=@Vardiya_No
+    Group By TD.Plate
+
+Alter PROCEDURE VardiyaHesabiAlOtomatic  @VardiyaIsmi Int,@Vardiya_No nchar(30)
+AS
+   select CAST(ROW_NUMBER() OVER (ORDER BY TD.Plate) AS INT) Id,TD.Plate,Sum(SD.Total) AS VardiyaTutari from SaleDetails SD
+	INNER JOIN Txn T on SD.Id=T.SaleDetailsNo 
+	INNER JOIN TagDetails TD on TD.Id=T.TagDetailsNo
+	where SD.VardiyaIsmi=@VardiyaIsmi and 
+	SD.TxnType=4 and SD.Vardiya_No=@Vardiya_No
+    Group By TD.Plate
+
+Alter PROCEDURE VardiyaHesabiAlTtc  @VardiyaIsmi Int,@Vardiya_No nchar(30)
+AS
+   select CAST(ROW_NUMBER() OVER (ORDER BY TD.Plate) AS INT) Id,TD.Plate,Sum(SD.Total) AS VardiyaTutari from SaleDetails SD
+	INNER JOIN Txn T on SD.Id=T.SaleDetailsNo 
+	INNER JOIN TagDetails TD on TD.Id=T.TagDetailsNo
+	where  SD.VardiyaIsmi=@VardiyaIsmi and 
+	SD.TxnType=3 and SD.Vardiya_No=@Vardiya_No
+    Group By TD.Plate
+	
+    EXEC dbo.VardiyaHesabiAlimi  @baslangictarihi =CONVERT(DATETIME, '2019-08-15', 102),@VardiyaIsmi=2021040901,@Vardiya_No='01'
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ALTER View Vardiya_SatisTank_Mutabakati
+as
+select CAST(ROW_NUMBER() OVER(Order by Tank33.FuelType) as INT) Id,Tank33.FuelType,Tank11.AsgLitreleri,Tank33.TankCikisi,
+(Tank11.AsgLitreleri-Tank33.TankCikisi) As Fark
+from
+(select TankD.Tankname  ,SUM(Sd.Amount) As AsgLitreleri from TankDetails TankD
+Inner Join Txn T on T.Shift_No=TankD.Shift_No
+Inner Join SaleDetails SD on SD.Id=T.SaleDetailsNo
+where UPPER(REPLACE(SD.FuelType_Name, ' ', ''))=UPPER(REPLACE(TankD.Tankname, ' ', '')) and Sd.FuelType IS NOT NULL
+Group By TankD.Tankname)  Tank11,
+
+(select Tank22.FuelType, sum(Tank22.Net_Tank_Cikisi) As TankCikisi
+from 
+(Select MaxT.FuelType,
+((MaxT.Delta)-(MaxT.CurrentVolume-MinT.PreviousVolume)) As Net_Tank_Cikisi
+from 
+(select t11.TankNo,t11.Tankname,t11.FuelType, t11.CurrentVolume,t11.Delta
+from 
+(SELECT Max(Shift_No) max1, TankNo,Tankname
+  FROM TankDetails
+  group by TankNo,Tankname) maxT ,
+
+   TankDetails  t11
+   where  t11.Shift_No = maxT.max1 and t11.TankNo = maxT.TankNo and t11.Tankname = maxT.Tankname)  MaxT,
+   (
+   select t11.TankNo,t11.Tankname, t11.PreviousVolume
+from 
+(SELECT Min(Shift_No) min1, TankNo,Tankname
+  FROM TankDetails
+  group by TankNo,Tankname) minT ,
+   TankDetails  t11
+   where  t11.Shift_No = minT.min1 and t11.TankNo = minT.TankNo and t11.Tankname = minT.Tankname)  MinT
+   where MaxT.TankNo = MinT.TankNo and MaxT.Tankname = MinT.Tankname)  Tank22
+   group by  Tank22.FuelType) Tank33
+   where Tank11.Tankname=Tank33.FuelType
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+SELECT CAST(ROW_NUMBER() OVER (ORDER BY Tank33.FuelType) AS INT) Id, Tank33.FuelType, Tank11.AsgLitreleri, Tank33.TankCikisi, 
+(Tank11.AsgLitreleri - Tank33.TankCikisi) AS Fark
+FROM     (SELECT TankD.Tankname, SUM(Sd.Amount) AS AsgLitreleri
+                  FROM      TankDetails TankD 
+				           INNER JOIN Txn T ON T .Shift_No = TankD.Shift_No 
+						   INNER JOIN SaleDetails SD ON SD.Id = T .SaleDetailsNo
+						   Inner join Shift S on S.Id=SD.Vardiya_No and S.Id=TankD.Shift_No
+                  WHERE   UPPER(REPLACE(SD.FuelType_Name, ' ', '')) = UPPER(REPLACE(TankD.Tankname, ' ', '')) AND Sd.FuelType IS NOT NULL
+				  and S.Id=(select MAX(M.Id) from Shift M)
+                  GROUP BY TankD.Tankname) Tank11,
+
+                      (SELECT Tank22.FuelType, sum(Tank22.Net_Tank_Cikisi) AS TankCikisi
+                       FROM      (SELECT MaxT.FuelType, ((MaxT.Delta) - (MaxT.CurrentVolume - MinT.PreviousVolume)) AS Net_Tank_Cikisi
+                                          FROM      (SELECT t11.TankNo, t11.Tankname, t11.FuelType, t11.CurrentVolume, t11.Delta
+                                                             FROM      (SELECT Max(Shift_No) max1, TankNo, Tankname
+                                                                                FROM      TankDetails 
+                                                                                GROUP BY TankNo, Tankname) maxT, TankDetails t11
+                                                             WHERE   t11.Shift_No = maxT.max1 AND t11.TankNo = maxT.TankNo AND
+															 t11.Tankname = maxT.Tankname) MaxT,
+                                                                (SELECT t11.TankNo, t11.Tankname, t11.PreviousVolume
+                                                                 FROM      (SELECT Min(Shift_No) min1, TankNo, Tankname
+                                                                                    FROM      TankDetails
+                                                                                    GROUP BY TankNo, Tankname) minT, TankDetails t11
+                                                                 WHERE   t11.Shift_No = minT.min1 AND t11.TankNo = minT.TankNo AND 
+																 t11.Tankname = minT.Tankname) MinT
+                                          WHERE   MaxT.TankNo = MinT.TankNo AND MaxT.Tankname = MinT.Tankname) Tank22
+                       GROUP BY Tank22.FuelType) Tank33
+WHERE  Tank11.Tankname = Tank33.FuelType
+
+
+
+
+   
+
+   
+
+
+
+
+ 
+ 
+
+
+
+
+

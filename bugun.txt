@@ -1,0 +1,363 @@
+Alter VIEW VardiyaFisiRaporu
+as
+SELECT CAST(ROW_NUMBER() OVER(Order by SD.FuelType) as INT) Id,SD.FuelType,SD.FuelType_Name,S.VardiyaIsmi,S.Description,
+S.Vardiya_Baslangic_Tarihi,S.Vardiya_Bitis_Tarihi,
+S.Baslangic_Saati,S.Bitis_Saati,
+SUM(SD.Amount) AS ToplamLitre,SUM(SD.Total) As ToplamTutar
+FROM Txn T
+INNER JOIN SaleDetails SD ON T.SaleDetailsNo=SD.Id
+INNER JOIN Shift S ON T.Shift_No=S.Id
+WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) And SD.FuelType IS NOT NULL
+and S.Id=(SELECT MAX(M.Id) FROM Shift M)
+GROUP BY SD.FuelType,SD.FuelType_Name,S.VardiyaIsmi,S.Description,S.Vardiya_Baslangic_Tarihi,S.Vardiya_Bitis_Tarihi,
+S.Baslangic_Saati,S.Bitis_Saati
+
+
+
+
+
+
+
+Create view KasaveSatisRapor
+AS
+SELECT 
+   CAST(ROW_NUMBER() OVER(Order by Tarih) as INT) Id,
+	SD.Tarih,
+	SD.FuelType,
+	SD.FuelType_Name,
+
+	ISNULL(SUM(CASE
+		WHEN TxnType= 4 THEN Total		
+	END),0) 'OtomatikliSatis',
+	ISNULL(SUM(CASE
+		WHEN TxnType <> 4 THEN Total		
+	END),0) 'OtomatiksizSatis',
+	sum(Total) ToplamSatisTutari,
+	ISNULL(Count(CASE
+		WHEN TxnType = 4 THEN Total		
+	END),0) 'OtomatikliAdet',
+	ISNULL(Count(CASE
+		WHEN TxnType <> 4 THEN Total		
+	END),0) 'OtomatiksizAdet',
+	Count(Total) ToplamAdet,
+	H.AylikHedef,
+	H.GunlukHedef,
+	H.GunlukOrtalamaSapma,
+	H.GercekGunlukOrtalama,
+	H.Gunsayisi,
+	H.YuzdeBeslikHedef,
+	H.YuzdeOnlukHedef
+   FROM 
+	Txn T
+	INNER JOIN SaleDetails SD ON SD.Id  = T.SaleDetailsNo
+	INNER JOIN TagDetails TD ON TD.Id = T.TagDetailsNo,Hedef H
+	WHERE  YEAR(H.CreateDate)=YEAR(GetDate()) and MONTH(H.CreateDate)=MONTH(GETDATE())
+GROUP BY 
+	SD.Tarih,SD.FuelType,SD.FuelType_Name,	H.AylikHedef,H.GunlukHedef,H.GunlukOrtalamaSapma,H.GercekGunlukOrtalama,
+	H.Gunsayisi,H.YuzdeBeslikHedef,H.YuzdeOnlukHedef
+
+
+	select *from KasaveSatisRapor
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	Alter View KasaveSatislarHedefKismi
+	as
+	select 
+	 CAST(ROW_NUMBER() OVER(Order by H.GunlukHedef) as INT) Id,
+	    H.Id As HedefId,
+		ISNULL(SUM(CASE
+		WHEN TxnType<> 4 THEN Total		
+	END),0) 'OtomatiksizSatis',H.GunlukHedef,H.AylikHedef,H.Gunsayisi,H.YuzdeBeslikHedef,H.YuzdeOnlukHedef
+	
+	from SaleDetails SD
+	Inner Join Txn T on T.SaleDetailsNo=SD.Id
+	Inner Join TagDetails Td on T.TagDetailsNo=Td.Id,
+	Hedef H
+	WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) And SD.FuelType IS NOT NULL 
+and H.Id=(SELECT MAX(M.Id) FROM Hedef M)
+Group by H.GunlukHedef,H.AylikHedef,H.Gunsayisi,H.YuzdeBeslikHedef,H.YuzdeOnlukHedef,H.Id
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+Create view OzetSatis_SatisTipi
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by TxnType) as INT) Id,SD.TxnType,SD.Txn_Name,SUM(SD.Amount) AS ToplamLitre,SUM(SD.Total) AS ToplamTutar,
+COUNT(*) AS SatisAdedi FROM SaleDetails SD
+WHERE YEAR(SD.Tarih)=YEAR(GETDATE()) AND MONTH(SD.Tarih)=MONTH(GETDATE()) AND  Sd.FuelType IS NOT NULL
+GROUP BY SD.TxnType,SD.Txn_Name
+
+select * from OzetSatis_SatisTipi
+
+
+Create VIEW OzetSatis_UrunTipi
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by FuelType) as INT) Id,SD.FuelType,SD.FuelType_Name,SD.UnitPrice,SUM(SD.Amount) AS ToplamLitre,
+SUM(SD.Total) AS ToplamTutar,count(*) AS SatisAdedi,AVG(SD.Total) OrtSatisTutari FROM SaleDetails SD
+WHERE YEAR(SD.Tarih)=YEAR(GETDATE()) AND MONTH(SD.Tarih)=MONTH(GETDATE()) AND  Sd.FuelType IS NOT NULL
+GROUP BY SD.FuelType,SD.FuelType_Name,SD.UnitPrice
+
+SELECT *from OzetSatis_UrunTipi
+
+
+CREATE VIEW OzetSatis_PompaciTipi
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by Plate) as INT) Id,TD.Plate,SUM(SD.Amount) AS ToplamLitre,Count(*) AS SatisAdedi,
+SUM(SD.Total) AS ToplamTutar,SUM(SD.Total) AS Fark From SaleDetails SD
+INNER JOIN Txn T on T.SaleDetailsNo=SD.Id 
+INNER JOIN TagDetails TD on T.TagDetailsNo=TD.Id
+WHERE YEAR(SD.Tarih)=YEAR(GETDATE()) AND MONTH(SD.Tarih)=MONTH(GETDATE()) and SD.TxnType=1 AND Sd.FuelType IS NOT NULL
+GROUP BY TD.Plate
+
+select *from OzetSatis_PompaciTipi
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+CREATE View Vardiya_SatisTuruRaporu
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by TxnType) as INT) Id,SD.TxnType,SD.Txn_Name,Count(*) AS SatisAdedi,
+SUM(SD.Amount) AS SatilanLitre, SUM(SD.Total) As SatilanTutar
+FROM SaleDetails SD 
+WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) AND Sd.FuelType IS NOT NULL
+GROUP BY SD.TxnType,SD.Txn_Name
+
+SELECT * FROM Vardiya_SatisTuruRaporu
+
+
+
+CREATE VIEW Vardiya_PompaciSatis
+AS
+SELECT 
+    CAST(ROW_NUMBER() OVER(Order by Plate) as INT) Id,TD.Plate,COUNT(SD.Total) AS SatisAdedi,SUM(SD.Total) AS SatisTutari
+ FROM Txn T 
+ INNER JOIN SaleDetails SD ON SD.Id=T.SaleDetailsNo
+ INNER JOIN TagDetails TD ON TD.Id=T.TagDetailsNo
+ WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) And SD.TxnType<>4  AND SD.TxnType<>3 And SD.FuelType IS NOT NULL
+ GROUP BY TD.Plate
+
+ SELECT * FROM Vardiya_PompaciSatis
+
+
+ CREATE View Vardiya_YakitTipiSatis
+ AS
+ SELECT 
+    CAST(ROW_NUMBER() OVER(Order by FuelType) as INT) Id,SD.FuelType,SD.FuelType_Name,
+	SD.UnitPrice,SUM(SD.Amount) AS SatilanLitre,SUM(SD.Total) As SatisTutari, SUM(SD.Total) AS ToplamLitre
+ FROM SaleDetails SD
+ WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) AND SD.FuelType IS NOT NULL
+ GROUP BY SD.FuelType,SD.FuelType_Name,SD.UnitPrice
+
+ SELECT * FROM Vardiya_YakitTipiSatis
+
+ CREATE VIEW Vardiya_TankCikisi
+ AS
+ SELECT 
+ TankD.TankNo,TankD.Tankname,TankD.FuelType,
+ TankD.CurrentVolume,TankD.PreviousVolume,TankD.Delta,SUM(TankD.CurrentVolume-TankD.PreviousVolume+Delta) AS NetTankCikisi
+ FROM Txn T
+ INNER JOIN SaleDetails SD on T.SaleDetailsNo=SD.Id
+ INNER JOIN TagDetails TD on T.SaleDetailsNo=SD.Id,TankDetails TankD 
+ WHERE YEAR(TankD.CreateDate)=YEAR(GETDATE()) AND MONTH(TankD.CreateDate)=MONTH(GETDATE()) and DAY(GETDATE())=DAY(TankD.CreateDate)
+ GROUP BY TankD.TankNo,TankD.Tankname,TankD.FuelType,
+ TankD.CurrentVolume,TankD.PreviousVolume,TankD.Delta
+
+SELECT * FROM Vardiya_TankCikisi
+
+CREATE View Vardiya_SatisTank_Mutabakati
+AS
+SELECT CAST(ROW_NUMBER() OVER(Order by TankD.FuelType) as INT) Id,TankD.FuelType,SUM(SD.Total) AS Pompasatislari,
+TankD.DeliveryVolume AS TankCikisi,
+SUM(SD.Total)-SUM(TankD.DeliveryVolume) As Fark
+FROM Txn T
+INNER JOIN SaleDetails SD ON T.SaleDetailsNo=SD.Id
+INNER JOIN TagDetails TD ON T.TagDetailsNo=SD.Id,
+TankDetails TankD
+WHERE CONVERT(DATE,TankD.CreateDate,104)=CONVERT(DATE,GETDATE(),104) And SD.TxnType<>4  AND SD.TxnType<>3 And SD.FuelType IS NOT NULL
+GROUP BY TankD.FuelType,TankD.DeliveryVolume
+
+select * from Vardiya_SatisTank_Mutabakati
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+CREATE VIEW VardiyaHesapAlma_AsgBilgi
+AS
+SELECT 	CAST(ROW_NUMBER() OVER(Order by SD.Tarih) as INT) Id,CONVERT(DATE,SD.Tarih,104) As Tarih,
+    TD.Plate,
+    ISNULL(SUM(CASE
+		WHEN SD.TxnType= 1  THEN SD.Total		
+	END),0) 'AsgSatislari',S.Vardiya_No,S.Id As VardiyaId
+	FROM SaleDetails SD
+	INNER JOIN Txn T ON T.SaleDetailsNo=SD.Id
+	INNER JOIN TagDetails TD ON T.TagDetailsNo=TD.Id
+	INNER JOIN Shift S ON T.Shift_No=S.Id
+	WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) AND SD.TxnType=1 AND S.Id=(SELECT MAX(M.Id) FROM Shift M) 
+	GROUP BY SD.Tarih,TD.Plate,S.Vardiya_No,S.Id 
+
+CREATE VIEW VardiyaHesapAlma_TtcVeOdegec
+As
+SELECT
+	CAST(ROW_NUMBER() OVER(Order by SD.Tarih) as INT) Id,CONVERT(DATE,SD.Tarih,104) As Tarih,
+    ISNULL(SUM(CASE
+		WHEN SD.TxnType= 3  THEN SD.Total		
+	END),0) 'OdegecSatislari', 
+	 ISNULL(SUM(CASE
+		WHEN SD.TxnType= 4  THEN SD.Total		
+	END),0) 'OtomatikSatislari',S.Vardiya_No,S.Id As VardiyaId
+		FROM SaleDetails SD
+	INNER JOIN Txn T ON T.SaleDetailsNo=SD.Id
+	INNER JOIN TagDetails TD ON T.TagDetailsNo=TD.Id
+	INNER JOIN Shift S ON T.Shift_No=S.Id
+	WHERE CONVERT(DATE,SD.Tarih,104)=CONVERT(DATE,GETDATE(),104) And S.Id=(SELECT MAX(M.Id) FROM Shift M)
+    GROUP BY SD.Tarih,S.Vardiya_No,S.Id
+
+
+
+
+
+
+CREATE view KasaveSatisRapor
+AS
+SELECT 
+   CAST(ROW_NUMBER() OVER(Order by Tarih) as INT) Id,
+	SD.Tarih,
+	SD.FuelType,
+	SD.FuelType_Name,
+
+	ISNULL(SUM(CASE
+		WHEN TxnType= 4 THEN Total		
+	END),0) 'OtomatikliSatis',
+	ISNULL(SUM(CASE
+		WHEN TxnType <> 4 THEN Total		
+	END),0) 'OtomatiksizSatis',
+	sum(Total) ToplamSatisTutari,
+	ISNULL(Count(CASE
+		WHEN TxnType = 4 THEN Total		
+	END),0) 'OtomatikliAdet',
+	ISNULL(Count(CASE
+		WHEN TxnType <> 4 THEN Total		
+	END),0) 'OtomatiksizAdet',
+	Count(Total) ToplamAdet,
+	H.AylikHedef,
+	H.GunlukHedef,
+	H.GunlukOrtalamaSapma,
+	H.GercekGunlukOrtalama,
+	H.Gunsayisi,
+	H.YuzdeBeslikHedef,
+	H.YuzdeOnlukHedef
+   FROM 
+	Txn T
+	INNER JOIN SaleDetails SD ON SD.Id  = T.SaleDetailsNo
+	INNER JOIN TagDetails TD ON TD.Id = T.TagDetailsNo,Hedef H
+
+	WHERE  YEAR(H.CreateDate)=YEAR(GetDate()) and MONTH(H.CreateDate)=MONTH(GETDATE()) And Sd.FuelType IS NOT NULL
+GROUP BY 
+	SD.Tarih,SD.FuelType,SD.FuelType_Name,	H.AylikHedef,H.GunlukHedef,H.GunlukOrtalamaSapma,H.GercekGunlukOrtalama,
+	H.Gunsayisi,H.YuzdeBeslikHedef,H.YuzdeOnlukHedef
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+sql procedure baglantı ayarları 
+///////////////
+        /* public IActionResult VardiyaHesapAlma()
+     {
+
+     VardiyaHesapKapat vardiyaHesapKapat = new VardiyaHesapKapat();
+         vardiyaHesapKapat.PaymentList = new List<Payment_Type>();
+         vardiyaHesapKapat.
+         vardiyaHesapKapat.SafeList = new List<Safe>();
+
+         string connection = _configuration.GetConnectionString("AkaryakitContext");
+         SqlDataReader dr = null;
+         var vardiyaturu = "3";
+         CookieOptions cookie = new CookieOptions();
+         cookie.Expires = DateTime.Now.AddYears(10);
+         Response.Cookies.Append("vardiyano","3" , cookie);
+         using (SqlConnection sqlconnec = new SqlConnection(connection))
+         {
+             using (SqlCommand sqlCommand = new SqlCommand("VardiyaHesapAlmaToplamTutar", sqlconnec))
+             {
+                 sqlconnec.Open();
+                 sqlCommand.CommandType = System.Data.CommandType.StoredProcedure;
+                  dr = sqlCommand.ExecuteReader();
+                 while (dr.Read())
+                 {
+                     VardiyaHesapAlmaModel hesapAlmaTutar = new VardiyaHesapAlmaModel();
+                     if (dr["Shift_No"].ToString()==vardiyaturu)
+                     {
+                         hesapAlmaTutar.Shift_No = dr["Shift_No"].ToString();
+                         hesapAlmaTutar.Tarih = DateTime.Now;
+                         hesapAlmaTutar.KeyKartAdi = dr["Plate"].ToString();
+                         hesapAlmaTutar.VardiyaTutari = Convert.ToDecimal(dr["ToplamTutar"].ToString());
+                         hesapAlmaTutar.SatisTipi =Convert.ToInt32(dr["TxnType"].ToString());
+                         vardiyaHesapKapat.VardiyaHesapAlmaModel.Add(hesapAlmaTutar);
+                     }
+
+                 }
+                 sqlconnec.Close();
+             }
+             using (SqlCommand sqlCommand = new SqlCommand("VardiyaHesapTtcandOtomatic", sqlconnec))
+             {
+                 sqlconnec.Open();
+                 dr = sqlCommand.ExecuteReader();
+                 while (dr.Read())
+                 {
+                     if (dr["Shift_No"].ToString() == vardiyaturu)
+                     {
+                         VardiyaHesapAlmaModel hesapAlmaTutar = new VardiyaHesapAlmaModel();
+                         hesapAlmaTutar.ToplamttcandOdegec = Convert.ToDecimal(dr["Toplamttcandodegec"]);
+                         hesapAlmaTutar.SatisTipi = Convert.ToInt32(dr["SatisTipi"].ToString());
+                         vardiyaHesapKapat.VardiyaHesapAlmaModel.Add(hesapAlmaTutar);
+                     }
+                 }
+
+                 sqlconnec.Close();
+
+             }
+             vardiyaHesapKapat.PaymentList=(_paymentrepository.Getlist());
+             vardiyaHesapKapat.SafeList = _saferepository.Getlist();
+         }
+
+         return View(vardiyaHesapKapat);
+     }*/
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+function baglanti cümlesi
+
+   SqlConnection conn = new SqlConnection(connection);
+            SqlCommand cmd = new SqlCommand("SELECT * FROM dbo.VardiyaHesabiAl(@baslangictarihi,@VardiyaIsmi)",
+                conn) ;
+
+            // cmd.CommandType=CommandType.StoredProcedure;  
+            List<VardiyaHesapAl> data = new List<VardiyaHesapAl>();
+            cmd.Parameters.AddWithValue("@baslangictarihi", Convert.ToDateTime("2021-04-14 13:55:40.790"));
+            cmd.Parameters.AddWithValue("@VardiyaIsmi", Convert.ToInt32("2021040901"));
+            conn.Open();
+            SqlDataReader dr = cmd.ExecuteReader();
+          
+                while (dr.Read())
+                {
+                    VardiyaHesapAl hesap = new VardiyaHesapAl();  
+                    hesap.CreateDate = dr.GetDateTime(0);
+                    hesap.Plate = dr.GetString(1);
+                    hesap.VardiyaTutari = dr.GetDecimal(2);
+                    data.Add(hesap);
+                }
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+sql function c# cekme kodu 
+  string connection = _configuration.GetConnectionString("AkaryakitContext");
+            List<VardiyaHesabiAlimi> data = new List<VardiyaHesabiAlimi>();
+            using (SqlConnection conn = new SqlConnection(connection))
+            {
+                conn.Open();
+                SqlCommand cmd = new SqlCommand("dbo.VardiyaHesabiAlimi", conn);
+                cmd.CommandType = CommandType.StoredProcedure;
+
+                cmd.Parameters.Add(new SqlParameter("@baslangictarihi", Convert.ToDateTime("2021-04-14 09:21:57.687")));
+                cmd.Parameters.Add(new SqlParameter("@VardiyaIsmi", 2021040901));
+                cmd.Parameters.Add(new SqlParameter("@Vardiya_No", "01"));
+                // execute the command
+                SqlDataReader rdr = cmd.ExecuteReader();
+                while (rdr.Read())
+                {
+                    VardiyaHesabiAlimi hesap = new VardiyaHesabiAlimi();
+                    hesap.CreateDate = rdr.GetDateTime(1);
+                    hesap.Plate = rdr.GetString(2);
+                    hesap.VardiyaTutari = rdr.GetDecimal(3);
+                    data.Add(hesap);
+                }
+            }
+	

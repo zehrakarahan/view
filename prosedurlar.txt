@@ -1,0 +1,44 @@
+
+alter Procedure VardiyaHesapAlmaToplamTutar
+as
+begin
+
+select a.Shift_No,b.TxnType,b.DateTime,c.Plate,SUM(b.Total) as 'ToplamTutar' from Txn a INNER JOIN SaleDetails b on a.SaleDetailsNo=b.Id INNER JOIN TagDetails c on a.TagDetailsNo=c.Id 
+where Convert(VarChar(10), b.DateTime, 101)=Convert(VarChar(10), GetDate(), 101) and (b.TxnType!=3 and b.TxnType!=4) 
+GROUP BY a.Shift_No,b.DateTime,c.Plate,b.TxnType
+end 
+
+exec VardiyaHesapAlmaToplamTutar
+
+
+Create Procedure VardiyaHesapTtcandOtomatic
+as
+begin
+select a.Shift_No,b.DateTime,SUM(b.Total) as 'ToplamttcandOdegec',b.TxnType as 'SatisTipi'  from Txn a INNER JOIN SaleDetails b on a.SaleDetailsNo=b.Id INNER JOIN TagDetails c on a.TagDetailsNo=c.Id 
+where Convert(VarChar(10), b.DateTime, 101)=Convert(VarChar(10), GetDate(), 101) and (b.TxnType=3 or b.TxnType=4)  
+GROUP BY a.Shift_No,b.DateTime,b.TxnType
+end 
+exec  VardiyaHesapTtcandOtomatic
+/////////////////////////////////////////////////////////////////////////////////////////
+
+DECLARE @txntype int
+create Procedure VardiyaHesapAlmaToplamTutar
+as
+begin
+SET @txntype=3
+select a.Shift_No,b.DateTime,c.Plate,SUM(b.Total) as 'ToplamTutar' from Txn a INNER JOIN SaleDetails b on a.SaleDetailsNo=b.Id INNER JOIN TagDetails c on a.TagDetailsNo=c.Id 
+where Convert(VarChar(10), b.CreateDate, 101)=Convert(VarChar(10), GetDate(), 101) and (b.TxnType!=3 or b.TxnType!=4)
+GROUP BY a.Shift_No,b.DateTime,c.Plate
+end 
+
+exec VardiyaHesapAlmaToplamTutar
+
+
+alter Procedure VardiyaHesapTtcandOtomatic
+as
+begin
+select a.Shift_No,b.DateTime,SUM(b.Total) as 'ToplamttcandOdegec',b.TxnType as 'SatisTipi'  from Txn a INNER JOIN SaleDetails b on a.SaleDetailsNo=b.Id INNER JOIN TagDetails c on a.TagDetailsNo=c.Id 
+where Convert(VarChar(10), b.CreateDate, 101)=Convert(VarChar(10), GetDate(), 101) and (b.TxnType=3 or b.TxnType=4)  
+GROUP BY a.Shift_No,b.DateTime,b.TxnType
+end 
+exec  VardiyaHesapTtcandOtomatic

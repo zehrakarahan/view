@@ -1,0 +1,105 @@
+ /* public async void PumpTotalizersAdd(SaleData xmldata)
+        {
+            foreach (var item in xmldata.PumpTotalizers)
+            {
+                await _pumprepository.AddAsync(new Pump
+                {
+                    AktifPasif = true,
+                    CreateDate = DateTime.Now,
+                    PumpName = (item.PumpName).ToString()
+                });
+                foreach (var item2 in item.Nozzles)
+                {
+                  await  _nozzlerepository.AddAsync(new Nozzles
+                    {
+                        CreateDate = DateTime.Now,
+                        AktifPasif = true,
+                        NozzleNr = item2.NozzleNr,
+                        FuelType = item2.FuelType.ToString(),
+                        Totalizer = item2.Totalizer.ToString(),
+                        Pump_No = _pumprepository.LastEntity().Id.ToString()
+                    });
+                }
+            }
+        }*/
+//////////////////////////////////////////////////////////////////////////////////////
+ /*  foreach(var item in xmldata.TankTotals)
+                   {
+
+
+                   }
+
+                    foreach (var item in xmldata.PumpTotalizers)
+                    {
+                        _pumprepository.Add(new Pump
+                        {
+                            AktifPasif = true,
+                            CreateDate = DateTime.Now,
+                            PumpName = (item.PumpName).ToString()
+                        });
+                        foreach (var item2 in item.Nozzles)
+                        {
+                            _nozzlerepository.Add(new Nozzles
+                            {
+                                CreateDate = DateTime.Now,
+                                AktifPasif = true,
+                                NozzleNr = item2.NozzleNr,
+                                FuelType = item2.FuelType.ToString(),
+                                Totalizer = item2.Totalizer.ToString(),
+                                Pump_No = _pumprepository.LastEntity().Id.ToString()
+                            });
+                        }
+                    }
+                    foreach (var item in xmldata.Txns)
+                    {
+
+                        _tagrepository.Add(new TagDetails {
+                            CreateDate = DateTime.Now,
+                            AktifPasif = true,
+                            FleetCode = item.TagDetails.FleetCode,
+                            FleetName = item.TagDetails.FleetName,
+                            TagNr = item.TagDetails.TagNr,
+                            Plate = item.TagDetails.Plate,
+                            EngineHour = item.TagDetails.EngineHour.ToString(),
+                            Odometer = item.TagDetails.Odometer.ToString()
+                        });
+                        _salerepository.Add(new SaleDetails 
+                        {
+                            CreateDate = DateTime.Now,
+                            AktifPasif = true,
+                            TxnType = item.SaleDetails.TxnType,
+                            Txn_Name =Functions.SatisTipiismi(item.SaleDetails.TxnType),
+                            DateTime =Functions.Tarih(item.SaleDetails.DateTime.ToString()),
+                            ReceiptNr = Convert.ToInt32(item.SaleDetails.ReceiptNr),
+                            FuelType = item.SaleDetails.FuelType.ToString(),
+                            Tarih =Functions.SatisTarihi(item.SaleDetails.DateTime.ToString()),
+                            Saat =Functions.SatisSaati(item.SaleDetails.DateTime.ToString()),
+                            UnitPrice = item.SaleDetails.UnitPrice.ToString(),
+                            Amount = item.SaleDetails.Amount,
+                            Total = item.SaleDetails.Total,
+                            PumpNr = item.SaleDetails.PumpNr,
+                            NozzleNr = item.SaleDetails.NozzleNr,
+                            PaymentType = item.SaleDetails.PaymentType,
+                            ECRPlate = item.SaleDetails.ECRPlate,
+                            FuelType_Name =Functions.YakitTipismi(item.SaleDetails.FuelType),
+                            ECRReceiptNr = item.SaleDetails.ECRReceiptNr,
+                            Redemption = item.SaleDetails.Redemption,
+                            DiscountAmount = item.SaleDetails.DiscountAmount,
+                            EarnedPoints = item.SaleDetails.EarnedPoints.ToString(),
+                            EarnedMoney = item.SaleDetails.EarnedMoney,
+                            LoyaltyCardType = item.SaleDetails.LoyaltyCardType,
+                            FullUnitPrice = item.SaleDetails.FullUnitPrice.ToString()
+                        });
+
+                        _txnrepository.Add(new Txn {
+                            CreateDate = DateTime.Now,
+                            AktifPasif = true,
+                            TagDetailsNo = _tagrepository.LastEntity().Id,
+                            SaleDetailsNo = _salerepository.LastEntity().Id,
+                            Shift_Nosu = no,
+                            Shift_No = _shiftrepository.LastEntity().Id
+                        });
+
+                    } */
+
+
